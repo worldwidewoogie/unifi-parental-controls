@@ -25,12 +25,16 @@ function init() {
     return new Promise((resolve, reject) => {
         unifi.init().then(() => {
             unifi.on('*.connected', data => {
-                console.log(`Recalculating schedule: ${data.msg}`)
-                recalculateCron()
+                if (config.controls.managedSSIDs.includes(data.ssid)) {
+                    console.log(`Recalculating schedule: ${data.msg}`)
+                    recalculateCron()
+                }
             })
             unifi.on('*.disconnected', data => {
-                console.log(`Recalculating schedule: ${data.msg}`)
-                recalculateCron()
+                if (config.controls.managedSSIDs.includes(data.ssid)) {
+                    console.log(`Recalculating schedule: ${data.msg}`)
+                    recalculateCron()
+                }
             })
             startCron().then(() => {
                 resolve({ error: false })
