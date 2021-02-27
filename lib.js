@@ -162,8 +162,12 @@ function recalculateCron(deviceGroup) {
                         } else {
                             let [macAddress, cronSchedule, action] = currentJob.split('|')
                             if (action === 'block') {
-                                console.log('Blocking ' + deviceMacAddresses[device] + ' since current schedule is blocked')
-                                block(macAddress)
+                                if (config.controls.managedGroups[groupsByID[deviceGroups[device]]].harsh) {
+                                    console.log('Blocking ' + deviceMacAddresses[device] + ' since current schedule is blocked')
+                                    block(macAddress)
+                                } else {
+                                    console.log('Not blocking ' + deviceMacAddresses[device] + ' since enforcement is not harsh')
+                                }
                             } else {
                                 console.log('Unblocking ' + deviceMacAddresses[device] + ' since current schedule is unblocked')
                                 unblock(macAddress)

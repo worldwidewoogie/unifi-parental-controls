@@ -25,10 +25,17 @@ module.exports = {
             'myssid',
             'myotherssid'
         ],
+        // how often to recalc the schedule
+        scheduleRecalc: '*/15 * * * *',
         // Unifi user groups to manage. Always either block or unblock each day at 00:00
+        // If harsh is false, you can manually unblock a user and they will not be blocked
+        // the next scheduled block
+        // If harsh is true, the schedule is enforced each time it is recalculated, so you
+        // cannot manually unblock the client
         managedGroups: {
             group1: {
                 enforceSchedule: true,
+                harsh: false,
                 schedule: {
                     sunday: [
                         { block: '00:00' },
@@ -69,6 +76,7 @@ module.exports = {
             },
             group2: {
                 enforceSchedule: true,
+                harsh: false,
                 schedule: {
                     sunday: [
                         { block: '00:00' },
@@ -106,6 +114,7 @@ module.exports = {
             // schedule for clients not in any group. In this case they are always blocked.
             NOGROUP: {
                 enforceSchedule: true,
+                harsh: true,
                 schedule: {
                     sunday: [
                         { block: '00:00' },
