@@ -58,12 +58,12 @@ module.exports.init = init
 function startCron() {
     return new Promise((resolve, reject) => {
         recalculateCron().then(() => {
-            console.log('Scheduling recalculateCron')
+            console.log(`Scheduling recalculateCron: ${config.controls.scheduleRecalc}`)
             schedule.scheduleJob('recalculateCron', config.controls.scheduleRecalc, () => {
                 recalculateCron()
             })
             if (config.log.dumpSchedule) {
-                console.log('Scheduling dumpSchedule')
+                console.log(`Scheduling dumpSchedule: ${config.log.dumpSchedule}`)
                 schedule.scheduleJob('dumpSchedule', config.log.dumpSchedule, () => {
                     Object.keys(schedule.scheduledJobs).forEach(jobName => {
                         console.log(jobName)
@@ -71,7 +71,7 @@ function startCron() {
                 })
             }
             if (config.log.dumpStatus) {
-                console.log('Scheduling dumpStatus')
+                console.log(`Scheduling dumpStatus: ${config.log.dumpStatus}`)
                 schedule.scheduleJob('dumpStatus', config.log.dumpStatus, () => {
                     dumpStatus()
                 })
@@ -121,27 +121,27 @@ function recalculateCron(deviceGroup) {
                     let jobNamesToCancel = currentSchedule.filter(j => !newSchedule.includes(j))
                     let jobNamesToSchedule = newSchedule.filter(j => !currentSchedule.includes(j))
                     jobNamesToCancel.forEach(jobName => {
-                        console.log('Canceling ' + jobName)
+                        console.log(`Canceling ${jobName}`)
                         schedule.cancelJob(jobName)
                     })
                     jobNamesToSchedule.forEach(jobName => {
                         let [macAddress, cronSchedule, action] = jobName.split('|')
-                        console.log('Scheduling ' + jobName)
+                        console.log(`Scheduling ${jobName}`)
                         if (action === 'block') {
                             schedule.scheduleJob(jobName, cronSchedule, () => {
-                                console.log('Blocking ' + macAddress + ' due to schedule')
+                                console.log(`Blocking ${macAddress} due to schedule`)
                                 block(macAddress)
                             })
                         } else {
                             schedule.scheduleJob(jobName, cronSchedule, () => {
-                                console.log('Unblocking ' + macAddress + ' due to schedule')
+                                console.log(`Unblocking ${macAddress} due to schedule`)
                                 unblock(macAddress)
                             })
                         }
                     })
                     if (!config.controls.managedGroups[groupsByID[deviceGroups[device]]].enforceSchedule) {
                         // no need to log about unmanaged devices
-                        // console.log('Not blocking/unblocking ' + deviceMacAddresses[device] + ' since it has no enforced schedule')
+                        // console.log(`Not blocking/unblocking ${deviceMacAddresses[device]} since it has no enforced schedule`)
                     } else if (jobNamesToCancel.length > 0 || jobNamesToSchedule.length > 0) {
                         let date = new Date
                         let minutes = date.getMinutes()
@@ -157,19 +157,19 @@ function recalculateCron(deviceGroup) {
                         })
                         console.log("Current schedule : " + currentJob)
                         if (currentJob === '') {
-                            console.log('Blocking ' + deviceMacAddresses[device] + ' since it has no current schedule')
+                            console.log(`Blocking ${deviceMacAddresses[device]} since it has no current schedule`)
                             block(deviceMacAddresses[device])
                         } else {
                             let [macAddress, cronSchedule, action] = currentJob.split('|')
                             if (action === 'block') {
                                 if (config.controls.managedGroups[groupsByID[deviceGroups[device]]].harsh) {
-                                    console.log('Blocking ' + macAddress + ' since current schedule is blocked')
+                                    console.log(`Blocking ${macAddress} since current schedule is blocked`)
                                     block(macAddress)
                                 } else {
-                                    console.log('Not blocking ' + macAddress + ' since enforcement is not harsh')
+                                    console.log(`Not blocking ${macAddress} since enforcement is not harsh`)
                                 }
                             } else {
-                                console.log('Unblocking ' + macAddress + ' since current schedule is unblocked')
+                                console.log(`Unblocking ${macAddress} since current schedule is unblocked`)
                                 unblock(macAddress)
                             }
                         }
@@ -332,10 +332,10 @@ function block(mac) {
     return new Promise((resolve, reject) => {
         unifi.post('cmd/stamgr', { cmd: 'block-sta', mac: mac.toLowerCase() }
         ).then(() => {
-            console.log('Blocked ' + mac)
+            console.log(`Blocked ${mac}`)
             resolve({
                 error: false,
-                status: 'Blocked ' + mac
+                status: `Blocked ${mac}`
             })
         }).catch((error) => {
             reject({
@@ -350,10 +350,10 @@ function unblock(mac) {
     return new Promise((resolve, reject) => {
         unifi.post('cmd/stamgr', { cmd: 'unblock-sta', mac: mac.toLowerCase() }
         ).then(() => {
-            console.log('Unblocked ' + mac)
+            console.log(`Unblocked ${mac}`)
             resolve({
                 error: false,
-                status: 'Unblocked ' + mac
+                status: `Unblocked ${mac}`
             })
         }).catch((error) => {
             reject({
