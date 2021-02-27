@@ -15,7 +15,7 @@ const openHttpConnections = {}
 app.use(basicAuth({ users: config.ui.users, challenge: true, realm: 'ParentalControls' }))
 
 app.get('/config', (req, res) => {
-    lib.getCleanConfig().then((response) => {
+    lib.getConfig().then((response) => {
         let html = '<!doctype html><html lang=en><head><meta charset=utf-8><title>config</title></head><body><pre>' +
             JSON.stringify(response, undefined, 4) +
             '</body></html>'

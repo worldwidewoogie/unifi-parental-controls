@@ -1,9 +1,10 @@
 "use strict"
 
-const unifi = require('node-unifi')
+const unifiAxiosEvents = require('unifi-axios-events')
 const schedule = require('node-schedule')
 const config = require('./config.js')
-const consoleStamp = require('console-stamp')
+
+const unifi = new unifiAxiosEvents(config.controller)
 
 const daysToCrontab = {
     sunday: '0',
@@ -22,12 +23,27 @@ const deviceGroups = {}
 
 function init() {
     return new Promise((resolve, reject) => {
-        startCron().then(() => {
-            resolve({ error: false })
-        }).catch((error) => {
-            reject({
-                error: true,
-                errorMessage: error
+        unifi.init().then(() => {
+            unifi.on('*.connected', data => {
+                console.log(`Recalculating schedule: ${data.msg}`)
+                recalculateCron()
+            })
+            unifi.on('*.disconnected', data => {
+                console.log(`Recalculating schedule: ${data.msg}`)
+                recalculateCron()
+            })
+            startCron().then(() => {
+                resolve({ error: false })
+            }).catch((error) => {
+                reject({
+                    error: true,
+                    errorMessage: error
+                })
+            }).catch((error) => {
+                reject({
+                    error: true,
+                    errorMessage: error
+                })
             })
         })
     })
@@ -154,6 +170,11 @@ function recalculateCron(deviceGroup) {
                 resolve({
                     error: false
                 })
+            }).catch((error) => {
+                reject({
+                    error: true,
+                    errorMessage: error
+                })
             })
         }).catch((error) => {
             reject({
@@ -166,43 +187,26 @@ function recalculateCron(deviceGroup) {
 
 function getGroups() {
     return new Promise((resolve, reject) => {
-        let controller = new unifi.Controller(config.controller.ip, config.controller.port)
-        controller.login(config.controller.username, config.controller.password, (error) => {
-            if (error) {
-                reject({
-                    error: true,
-                    errorMessage: "Error logging into controller: " + error
-                })
-            } else {
-                controller.getUserGroups(config.controls.managedSite, (error, g) => {
-                    if (error) {
-                        reject({
-                            error: true,
-                            errorMessage: "Error getting current groups: " + error
-                        })
+        unifi.get('list/usergroup').then(response => {
+            if (response.data) {
+                response.data.forEach(group => {
+                    if (Object.keys(config.controls.managedGroups).includes(group.name)) {
+                        groupsByID[group._id] = group.name
+                        groupsByName[group.name] = group._id
                     } else {
-                        if (g && g[0]) {
-                            g[0].forEach(group => {
-                                if (Object.keys(config.controls.managedGroups).includes(group.name)) {
-                                    groupsByID[group._id] = group.name
-                                    groupsByName[group.name] = group._id
-                                } else {
-                                    delete groupsByID[group._id]
-                                    delete groupsByName[group.name]
-                                }
-                            })
-                            resolve({
-                                error: false
-                            })
-                        } else {
-                            reject({
-                                error: true,
-                                errorMessage: "Error getting current groups: no groups returned"
-                            })
-                        }
+                        delete groupsByID[group._id]
+                        delete groupsByName[group.name]
                     }
                 })
             }
+            resolve({
+                error: false
+            })
+        }).catch((error) => {
+            reject({
+                error: true,
+                errorMessage: error
+            })
         })
     })
 }
@@ -253,50 +257,32 @@ function getDeviceGroups() {
 function getCurrentlyConnectedDevicesForSSIDs() {
     return new Promise((resolve, reject) => {
         let devices = []
-        let controller = new unifi.Controller(config.controller.ip, config.controller.port)
-        controller.login(config.controller.username, config.controller.password, (error) => {
-            if (error) {
-                reject({
-                    error: true,
-                    errorMessage: "Error logging into controller: " + error
-                })
-            } else {
-                controller.getClientDevices(config.controls.managedSite, (error, d) => {
-                    if (error) {
-                        reject({
-                            error: true,
-                            errorMessage: "Error getting client devices: " + error
-                        })
-                    } else {
-                        if (d && d[0]) {
-                            d[0].forEach(device => {
-                                if (device.essid && config.controls.managedSSIDs.includes(device.essid)) {
-                                    let tempDevice = {
-                                        id: device._id,
-                                        mac: device.mac,
-                                    }
-                                    if (device.usergroup_id) {
-                                        tempDevice.group = device.usergroup_id
-                                    } else {
-                                        tempDevice.group = 'NOGROUP'
-                                    }
-                                    devices.push(tempDevice)
-                                }
-                            })
-                            controller.logout()
-                            resolve({
-                                error: false,
-                                devices: devices
-                            })
-                        } else {
-                            reject({
-                                error: true,
-                                errorMessage: "Error getting currently connected devices: no devices returned"
-                            })
+        unifi.get('stat/sta').then(response => {
+            if (response.data) {
+                response.data.forEach(device => {
+                    if (device.essid && config.controls.managedSSIDs.includes(device.essid)) {
+                        let tempDevice = {
+                            id: device._id,
+                            mac: device.mac,
                         }
+                        if (device.usergroup_id) {
+                            tempDevice.group = device.usergroup_id
+                        } else {
+                            tempDevice.group = 'NOGROUP'
+                        }
+                        devices.push(tempDevice)
                     }
                 })
             }
+            resolve({
+                error: false,
+                devices: devices
+            })
+        }).catch((error) => {
+            reject({
+                error: true,
+                errorMessage: error
+            })
         })
     })
 }
@@ -304,188 +290,134 @@ function getCurrentlyConnectedDevicesForSSIDs() {
 function getAllKnownDevicesInGroups() {
     return new Promise((resolve, reject) => {
         let devices = []
-        let controller = new unifi.Controller(config.controller.ip, config.controller.port)
-        controller.login(config.controller.username, config.controller.password, (error) => {
-            if (error) {
-                reject({
-                    error: true,
-                    errorMessage: "Error logging into controller: " + error
-                })
-            } else {
-                controller.getAllUsers(config.controls.managedSite, (error, d) => {
-                    if (error) {
-                        reject({
-                            error: true,
-                            errorMessage: "Error getting client devices: " + error
-                        })
-                    } else {
-                        if (d && d[0]) {
-                            d[0].forEach(device => {
-                                if (device.usergroup_id && groupsByID[device.usergroup_id]) {
-                                    let tempDevice = {
-                                        id: device._id,
-                                        mac: device.mac,
-                                        hostname: device.hostname,
-                                        group: device.usergroup_id,
-                                    }
-                                    if (device.note) {
-                                        tempDevice.note = device.note
-                                    }
-                                    devices.push(tempDevice)
-                                }
-                            })
-                            controller.logout()
-                            resolve({
-                                error: false,
-                                devices: devices
-                            })
-                        } else {
-                            reject({
-                                error: true,
-                                errorMessage: "Error getting known devices: no devices returned"
-                            })
+        unifi.get('stat/alluser').then(response => {
+            if (response.data) {
+                response.data.forEach(device => {
+                    if (device.usergroup_id && groupsByID[device.usergroup_id]) {
+                        let tempDevice = {
+                            id: device._id,
+                            mac: device.mac,
+                            hostname: device.hostname,
+                            group: device.usergroup_id,
                         }
+                        if (device.note) {
+                            tempDevice.note = device.note
+                        }
+                        devices.push(tempDevice)
                     }
                 })
             }
+            resolve({
+                error: false,
+                devices: devices
+            })
+        }).catch((error) => {
+            reject({
+                error: true,
+                errorMessage: error
+            })
         })
     })
 }
 
 function block(mac) {
     return new Promise((resolve, reject) => {
-        let controller = new unifi.Controller(config.controller.ip, config.controller.port)
-        controller.login(config.controller.username, config.controller.password, (error) => {
-            if (error) {
-                reject({
-                    error: true,
-                    errorMessage: "Error logging into controller: " + error
-                })
-            } else {
-                // controller.blockClient(config.controls.managedSite, mac,  (error) =>{
-                //     if (error) {
-                //         reject({
-                //             error: true,
-                //             errorMessage: 'Error blocking ' + mac + ': ' + error
-                //         })
-                //     } else {
-                controller.logout()
-                console.log('Blocked ' + mac)
-                resolve({
-                    error: false,
-                    status: 'Blocked ' + mac
-                })
-                //     }
-                // })
-            }
+        unifi.post('cmd/stamgr', { cmd: 'block-sta', mac: mac.toLowerCase() }
+        ).then(() => {
+            console.log('Blocked ' + mac)
+            resolve({
+                error: false,
+                status: 'Blocked ' + mac
+            })
+        }).catch((error) => {
+            reject({
+                error: true,
+                errorMessage: error
+            })
         })
     })
 }
 
 function unblock(mac) {
     return new Promise((resolve, reject) => {
-        let controller = new unifi.Controller(config.controller.ip, config.controller.port)
-        controller.login(config.controller.username, config.controller.password, (error) => {
-            if (error) {
-                reject({
-                    error: true,
-                    errorMessage: "Error logging into controller: " + error
-                })
-            } else {
-                // controller.unblockClient(config.controls.managedSite, mac,  (error) => {
-                //     if (error) {
-                //         reject({
-                //             error: true,
-                //             errorMessage: 'Error unblocking ' + mac + ': ' + error
-                //         })
-                //     } else {
-                controller.logout()
-                console.log('Unblocked ' + mac)
-                resolve({
-                    error: false,
-                    status: 'Unblocked ' + mac
-                })
-                //     }
-                // })
-            }
+        unifi.post('cmd/stamgr', { cmd: 'unblock-sta', mac: mac.toLowerCase() }
+        ).then(() => {
+            console.log('Unblocked ' + mac)
+            resolve({
+                error: false,
+                status: 'Unblocked ' + mac
+            })
+        }).catch((error) => {
+            reject({
+                error: true,
+                errorMessage: error
+            })
         })
     })
 }
 
 function getSingleStatus(deviceId) {
     return new Promise((resolve, reject) => {
-        let controller = new unifi.Controller(config.controller.ip, config.controller.port)
-        controller.login(config.controller.username, config.controller.password, (error) => {
-            if (error) {
-                reject({
-                    error: true,
-                    errorMessage: "Error logging into controller: " + error
+        unifi.get('stat/user/' + deviceMacAddresses[deviceId].toLowerCase()).then(response => {
+            if (response.data && response.data[0]) {
+                let lastschedule = ''
+                let nextschedule = ''
+                if (groupsByID[response.data[0]._id] ? config.controls.managedGroups[groupsByID[response.data[0]._id]].enforceSchedule : config.controls.managedGroups['NOGROUP'].enforceSchedule) {
+                    let date = new Date
+                    let minutes = date.getMinutes()
+                    let hour = date.getHours()
+                    let dayOfWeek = date.getDay()
+                    let currentSchedule = []
+                    Object.keys(schedule.scheduledJobs).forEach(jobName => {
+                        if (jobName.split('|')[0] === response.data[0].mac) {
+                            currentSchedule.push(jobName)
+                        }
+                    })
+                    currentSchedule.forEach(s => {
+                        let cronSchedule = s.split('|')[1]
+                        let [m, h, x, y, w] = cronSchedule.split(' ')
+                        if (w == dayOfWeek && (h < hour || (m <= minutes && h == hour))) {
+                            lastschedule = s
+                        } else {
+                            if (lastschedule !== '' && nextschedule === '') {
+                                nextschedule = s
+                            }
+                        }
+                    })
+                    if (nextschedule === '') {
+                        nextschedule = currentSchedule[0]
+                    }
+                }
+                let device = {
+                    id: response.data[0]._id,
+                    mac: response.data[0].mac,
+                    oui: response.data[0].oui,
+                    hostname: response.data[0].hostname ? response.data[0].hostname : '',
+                    essid: response.data[0].essid ? response.data[0].essid : '',
+                    ip: response.data[0].use_fixedip ? response.data[0].fixed_ip : response.data[0].ip,
+                    name: response.data[0].name ? response.data[0].name : '',
+                    blocked: response.data[0].blocked ? response.data[0].blocked : false,
+                    group: response.data[0].usergroup_id ? groupsByID[response.data[0].usergroup_id] : 'NOGROUP',
+                    enforceSchedule: groupsByID[response.data[0]._id] ? config.controls.managedGroups[groupsByID[response.data[0]._id]].enforceSchedule : config.controls.managedGroups['NOGROUP'].enforceSchedule,
+                    lastschedule: lastschedule,
+                    nextschedule: nextschedule,
+                }
+                resolve({
+                    error: false,
+                    device: device
                 })
             } else {
-                controller.getClientDevice(config.controls.managedSite, (error, d) => {
-                    if (error) {
-                        reject({
-                            error: true,
-                            errorMessage: "Error getting client device " + deviceMacAddresses[deviceId] + ": " + error
-                        })
-                    } else {
-                        controller.logout()
-                        if (d && d[0] && d[0][0]) {
-                            let lastSchedule = ''
-                            let nextSchedule = ''
-                            if (groupsByID[d[0][0]._id] ? config.controls.managedGroups[groupsByID[d[0][0]._id]].enforceSchedule : config.controls.managedGroups['NOGROUP'].enforceSchedule) {
-                                let date = new Date
-                                let minutes = date.getMinutes()
-                                let hour = date.getHours()
-                                let dayOfWeek = date.getDay()
-                                let currentSchedule = []
-                                Object.keys(schedule.scheduledJobs).forEach(jobName => {
-                                    if (jobName.split('|')[0] === d[0][0].mac) {
-                                        currentSchedule.push(jobName)
-                                    }
-                                })
-                                currentSchedule.forEach(s => {
-                                    let cronSchedule = s.split('|')[1]
-                                    let [m, h, x, y, w] = cronSchedule.split(' ')
-                                    if (w == dayOfWeek && (h < hour || (m <= minutes && h == hour))) {
-                                        lastSchedule = s
-                                    } else {
-                                        if (lastSchedule !== '' && nextSchedule === '') {
-                                            nextSchedule = s
-                                        }
-                                    }
-                                })
-                                if (nextSchedule === '') {
-                                    nextSchedule = currentSchedule[0]
-                                }
-                            }
-                            let device = {
-                                id: d[0][0]._id,
-                                mac: d[0][0].mac,
-                                oui: d[0][0].oui,
-                                hostname: d[0][0].hostname ? d[0][0].hostname : '',
-                                essid: d[0][0].essid ? d[0][0].essid : '',
-                                ip: d[0][0].use_fixedip ? d[0][0].fixed_ip : d[0][0].ip,
-                                name: d[0][0].name ? d[0][0].name : '',
-                                blocked: d[0][0].blocked ? d[0][0].blocked : false,
-                                group: d[0][0].usergroup_id ? groupsByID[d[0][0].usergroup_id] : 'NOGROUP',
-                                enforceSchedule: groupsByID[d[0][0]._id] ? config.controls.managedGroups[groupsByID[d[0][0]._id]].enforceSchedule : config.controls.managedGroups['NOGROUP'].enforceSchedule,
-                                lastSchedule: lastSchedule,
-                                nextSchedule: nextSchedule,
-                            }
-                            resolve({
-                                error: false,
-                                device: device
-                            })
-                        } else {
-                            reject({
-                                error: true,
-                                errorMessage: "Error getting client device " + deviceMacAddresses[deviceId] + ": device not found"
-                            })
-                        }
-                    }
-                }, deviceMacAddresses[deviceId])
+                reject({
+                    error: true,
+                    errorMessage: "Error getting client device " + deviceMacAddresses[deviceId] + ": device not found"
+                })
             }
+        }).catch((error) => {
+            console.dir(error)
+            reject({
+                error: true,
+                errorMessage: "Error getting all client device " + deviceMacAddresses[deviceId] + ": " + error
+            })
         })
     })
 }
@@ -529,9 +461,9 @@ function dumpStatus() {
     })
 }
 
-function getConfig() {
+function getCleanConfig() {
     return new Promise((resolve, reject) => {
-        let cleanConfig = config
+        let cleanConfig = JSON.parse(JSON.stringify(config));
         delete cleanConfig.controller.password
         Object.keys(cleanConfig.ui.users).forEach(u => {
             cleanConfig.ui.users[u] = '********'
@@ -540,4 +472,4 @@ function getConfig() {
     })
 }
 
-module.exports.getConfig = getConfig
+module.exports.getCleanConfig = getCleanConfig
