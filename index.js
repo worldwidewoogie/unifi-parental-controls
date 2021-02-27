@@ -8,7 +8,7 @@ const basicAuth = require('express-basic-auth')
 const config = require('./config/config.js')
 
 const app = express()
-const port = 80
+const port = 8080
 const httpServer = http.Server(app)
 const openHttpConnections = {}
 
