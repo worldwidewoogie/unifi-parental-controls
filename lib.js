@@ -59,7 +59,7 @@ function startCron() {
     return new Promise((resolve, reject) => {
         recalculateCron().then(() => {
             console.log('Scheduling recalculateCron')
-            schedule.scheduleJob('recalculateCron', '*/1 * * * *', () => {
+            schedule.scheduleJob('recalculateCron', config.controls.scheduleRecalc, () => {
                 recalculateCron()
             })
             if (config.log.dumpSchedule) {
