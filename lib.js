@@ -140,8 +140,8 @@ function recalculateCron(deviceGroup) {
                         }
                     })
                     if (!config.controls.managedGroups[groupsByID[deviceGroups[device]]].enforceSchedule) {
-                        console.log('Unblocking ' + deviceMacAddresses[device] + 'since it has no enforced schedule')
-                        unblock(macAddressdeviceMacAddresses[device])
+                        // no need to log about unmanaged devices
+                        // console.log('Not blocking/unblocking ' + deviceMacAddresses[device] + ' since it has no enforced schedule')
                     } else if (jobNamesToCancel.length > 0 || jobNamesToSchedule.length > 0) {
                         let date = new Date
                         let minutes = date.getMinutes()
@@ -158,18 +158,18 @@ function recalculateCron(deviceGroup) {
                         console.log("Current schedule : " + currentJob)
                         if (currentJob === '') {
                             console.log('Blocking ' + deviceMacAddresses[device] + ' since it has no current schedule')
-                            block(macAddressdeviceMacAddresses[device])
+                            block(deviceMacAddresses[device])
                         } else {
                             let [macAddress, cronSchedule, action] = currentJob.split('|')
                             if (action === 'block') {
                                 if (config.controls.managedGroups[groupsByID[deviceGroups[device]]].harsh) {
-                                    console.log('Blocking ' + deviceMacAddresses[device] + ' since current schedule is blocked')
+                                    console.log('Blocking ' + macAddress + ' since current schedule is blocked')
                                     block(macAddress)
                                 } else {
-                                    console.log('Not blocking ' + deviceMacAddresses[device] + ' since enforcement is not harsh')
+                                    console.log('Not blocking ' + macAddress + ' since enforcement is not harsh')
                                 }
                             } else {
-                                console.log('Unblocking ' + deviceMacAddresses[device] + ' since current schedule is unblocked')
+                                console.log('Unblocking ' + macAddress + ' since current schedule is unblocked')
                                 unblock(macAddress)
                             }
                         }
