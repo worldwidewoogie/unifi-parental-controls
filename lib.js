@@ -2,7 +2,7 @@
 
 const unifiAxiosEvents = require('unifi-axios-events')
 const schedule = require('node-schedule')
-const config = require('./config.js')
+const config = require('./config/config.js')
 
 const unifi = new unifiAxiosEvents(config.controller)
 

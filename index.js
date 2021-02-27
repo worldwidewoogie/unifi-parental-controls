@@ -5,7 +5,7 @@ const lib = require('./lib.js')
 const http = require('http')
 const express = require('express')
 const basicAuth = require('express-basic-auth')
-const config = require('./config.js')
+const config = require('./config/config.js')
 
 const app = express()
 const port = 3000
