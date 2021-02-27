@@ -1,6 +1,6 @@
 module.exports = {
     controller: {
-        ip: '192.168.1.1',
+        host: '192.168.1.1',
         port: '443',
         username: 'admin',
         password: '<password>',
