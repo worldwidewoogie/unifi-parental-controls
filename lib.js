@@ -407,6 +407,7 @@ function getSingleStatus(deviceId) {
                     blocked: response.data[0].blocked ? response.data[0].blocked : false,
                     group: response.data[0].usergroup_id ? groupsByID[response.data[0].usergroup_id] : 'NOGROUP',
                     enforceSchedule: groupsByID[response.data[0]._id] ? config.controls.managedGroups[groupsByID[response.data[0]._id]].enforceSchedule : config.controls.managedGroups['NOGROUP'].enforceSchedule,
+                    harsh: groupsByID[response.data[0]._id] ? config.controls.managedGroups[groupsByID[response.data[0]._id]].harsh : config.controls.managedGroups['NOGROUP'].harsh,
                     lastschedule: lastschedule,
                     nextschedule: nextschedule,
                 }
