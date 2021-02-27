@@ -1,0 +1,19 @@
+{
+  "name": "unifi-parental-controls",
+  "version": "0.1.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "console-stamp": "^0.2.9",
+    "express": "^4.17.1",
+    "express-basic-auth": "^1.2.0",
+    "http": "0.0.1-security",
+    "node-schedule": "^2.0.0",
+    "unifi-axios-events": "github:worldwidewoogie/unifi-axios-events"
+  }
+}
