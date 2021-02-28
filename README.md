@@ -46,7 +46,7 @@ Edit config/config.js to suit your needs
 
 `$ node index.js`
 
-Right now, the only documentation for config.js is in [config-example.js](config/config.js) is in the file itself.
+Right now, the only documentation for config.js is in [config-example.js](config/config-example.js).
 
 This is a work in progress. Hopefully that will mean better documentation at some point.
 
