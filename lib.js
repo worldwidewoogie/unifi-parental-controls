@@ -21,18 +21,20 @@ const idformat = /^(0|[1-9]\d*)$/
 
 const piholeCommands = {}
 
-Object.keys(piholeSql).forEach(command => {
-    let splitOnSingle = piholeSql[command].split("'")
-    for (let i = 0; i < splitOnSingle.length; i++) {
-        splitOnSingle[i] = splitOnSingle[i].split('"').join(`\\"`)
-    }
-    piholeCommands[command] = `${config.pihole.bash} -c "echo '${splitOnSingle.join(`"'"`)}' | ${config.pihole.sqliteCommand} ${config.pihole.dbPath}/gravity.db"`
-    if (config.pihole.podmanCommand) {
-        piholeCommands[command] = `${config.pihole.podmanCommand} exec -it ${config.pihole.containerName} ${piholeCommands[command]}`
-    } else if (config.pihole.dockerCommand) {
-        piholeCommands[command] = `${config.pihole.dockerCommand} exec -it ${config.pihole.containerName} ${piholeCommands[command]}`
-    }
-})
+if (config.pihole) {
+    Object.keys(piholeSql).forEach(command => {
+        let splitOnSingle = piholeSql[command].split("'")
+        for (let i = 0; i < splitOnSingle.length; i++) {
+            splitOnSingle[i] = splitOnSingle[i].split('"').join(`\\"`)
+        }
+        piholeCommands[command] = `${config.pihole.bash} -c "echo '${splitOnSingle.join(`"'"`)}' | ${config.pihole.sqliteCommand} ${config.pihole.dbPath}/gravity.db"`
+        if (config.pihole.podmanCommand) {
+            piholeCommands[command] = `${config.pihole.podmanCommand} exec -it ${config.pihole.containerName} ${piholeCommands[command]}`
+        } else if (config.pihole.dockerCommand) {
+            piholeCommands[command] = `${config.pihole.dockerCommand} exec -it ${config.pihole.containerName} ${piholeCommands[command]}`
+        }
+    })
+}
 
 const daysToCrontab = {
     sunday: '0',
