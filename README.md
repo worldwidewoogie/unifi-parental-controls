@@ -2,6 +2,8 @@
 
 unifi-parental-controls uses Unifi user groups to block/unblock client devices on a schedule. That is all it does at this point, but I'm looking to add more features if/when I can figure out the APIs to support them. That likely means no policy based blocking of classes of sites, since Unifi does not currently support policy based routing.
 
+However, unifi-parental-controls now has support for managing access to sites using pihole groups. You can set clients' pihole groups on a schedule similar to the block/unblock.
+
 [![License][mit-badge]][mit-url]
 
 ## Requirements
