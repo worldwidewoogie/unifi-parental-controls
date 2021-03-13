@@ -176,7 +176,7 @@ function recalculateCron(deviceGroup) {
                                 console.log(`Scheduling ${jobName}`)
                                 if (action === 'block') {
                                     schedule.scheduleJob(jobName, cronSchedule, () => {
-                                        console.log(`Blocking ${mac} due to schedule`)
+                                        console.log(`Blocking ${macAddress} due to schedule`)
                                         block(macAddress).then(message => {
                                             console.log(message)
                                         }).catch(error => {
