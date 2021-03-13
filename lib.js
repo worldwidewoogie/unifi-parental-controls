@@ -460,23 +460,23 @@ function getAllKnownDevicesInGroups() {
 
 function block(mac) {
     return new Promise((resolve, reject) => {
-        // unifi.post('cmd/stamgr', { cmd: 'block-sta', mac: mac.toLowerCase() }
-        // ).then(() => {
-        resolve(`Blocked ${mac}`)
-        // }).catch((error) => {
-        //     reject(error)
-        // })
+        unifi.post('cmd/stamgr', { cmd: 'block-sta', mac: mac.toLowerCase() }
+        ).then(() => {
+            resolve(`Blocked ${mac}`)
+        }).catch((error) => {
+            reject(error)
+        })
     })
 }
 
 function unblock(mac) {
     return new Promise((resolve, reject) => {
-        // unifi.post('cmd/stamgr', { cmd: 'unblock-sta', mac: mac.toLowerCase() }
-        // ).then(() => {
-        resolve(`Unblocked ${mac}`)
-        // }).catch((error) => {
-        //     reject(error)
-        // })
+        unifi.post('cmd/stamgr', { cmd: 'unblock-sta', mac: mac.toLowerCase() }
+        ).then(() => {
+            resolve(`Unblocked ${mac}`)
+        }).catch((error) => {
+            reject(error)
+        })
     })
 }
 
