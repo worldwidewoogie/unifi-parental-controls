@@ -36,7 +36,10 @@ app.listen(port, () => {
     console.log(`Listening on http://localhost:${port}`)
 })
 
-lib.init()
+lib.init().catch((error) => {
+    console.error(error)
+    shutdown()
+})
 
 httpServer.on('connection', function (conn) {
     var key = conn.remoteAddress + ':' + (conn.remotePort || '')
