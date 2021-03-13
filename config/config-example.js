@@ -8,6 +8,26 @@ module.exports = {
         // allow self signed certs
         insecure: true
     },
+    // if you do not want to manage a pihole instance, delete this section
+    pihole: {
+        // ip address or hostname for the pihole instance
+        host: '192.168.1.2',
+        // username of the OS user to run sqlite3 commands against the pihole db
+        username: '<username>',
+        // path to the ssh private key that will allow logins to the above user
+        privateKey: './config/pihole.key',
+        // if you run pihole in podman or docker, specify only one of these
+        podmanCommand: '/usr/bin/podman',
+        // dockerCommand: '/usr/bin/podman',
+        // the container name if using podman or docker
+        containerName: 'pihole',
+        // the path to the shell
+        bash: '/bin/bash',
+        // the path to sqlite3
+        sqliteCommand: '/usr/bin/sqlite3',
+        // path to the pihole db
+        dbPath: '/etc/pihole',
+    },
     // credentials for the web ui
     ui: {
         users: {
@@ -45,6 +65,20 @@ module.exports = {
                     monday: [
                         { block: '00:00' },
                         { unblock: '07:30' },
+                        // example of changing pihole groups to block/enable access
+                        {
+                            pihole: {
+                                time: '08:30',
+                                groups: ['Default', 'NoYoutube', 'NoSteam', 'NoDiscord', 'NoSpotify']
+                            }
+                        },
+                        {
+                            pihole:
+                            {
+                                time: '14:30',
+                                groups: ['Default']
+                            }
+                        },
                         { block: '22:30' },
                     ],
                     tuesday: [
