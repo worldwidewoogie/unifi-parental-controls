@@ -1,4 +1,4 @@
-FROM node:lts-alpine
+FROM node:lts
 RUN mkdir -p /node/config
 WORKDIR /node
 COPY package.json index.js lib.js LICENSE README.md ./
