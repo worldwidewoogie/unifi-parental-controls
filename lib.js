@@ -637,7 +637,16 @@ function getStatus() {
     })
 }
 
-module.exports.getStatus = getStatus
+function httpGetStatus(req, res, next) {
+    getStatus().then((results) => {
+        res.json(results);
+    }).catch(function (err) {
+        console.dir(err)
+        res.status(500).json({ "error": "Internal Server Error" })
+    })
+}
+
+module.exports.httpGetStatus = httpGetStatus
 
 function dumpStatus() {
     return new Promise((resolve, reject) => {
@@ -663,4 +672,13 @@ function getCleanConfig() {
     })
 }
 
-module.exports.getCleanConfig = getCleanConfig
+function httpGetConfig(req, res, next) {
+    getCleanConfig().then((results) => {
+        res.json(results);
+    }).catch(function (err) {
+        console.dir(err)
+        res.status(500).json({ "error": "Internal Server Error" })
+    })
+}
+
+module.exports.httpGetConfig = httpGetConfig

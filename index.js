@@ -10,27 +10,11 @@ const config = require('./config/config.js')
 const app = express()
 const port = 8080
 const httpServer = http.Server(app)
+const router = require('./router.js')
 const openHttpConnections = {}
 
-app.use(basicAuth({ users: config.ui.users, challenge: true, realm: 'ParentalControls' }))
-
-app.get('/config', (req, res) => {
-    lib.getConfig().then((response) => {
-        let html = '<!doctype html><html lang=en><head><meta charset=utf-8><title>config</title></head><body><pre>' +
-            JSON.stringify(response, undefined, 4) +
-            '</body></html>'
-        res.send(html)
-    })
-})
-
-app.get('/status', (req, res) => {
-    lib.getStatus().then((response) => {
-        let html = '<!doctype html><html lang=en><head><meta charset=utf-8><title>status</title></head><body><pre>' +
-            JSON.stringify(response, undefined, 4) +
-            '</body></html>'
-        res.send(html)
-    })
-})
+app.use('/', basicAuth({ users: config.ui.users, challenge: true, realm: 'ParentalControls' }), router.getRouter())
+app.use(express.json())
 
 app.listen(port, () => {
     console.log(`Listening on http://localhost:${port}`)
