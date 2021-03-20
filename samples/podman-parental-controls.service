@@ -1,0 +1,22 @@
+[Unit]
+Description=Sample systemd unit file for running a podman container
+After=network-online.target firewalld.service
+Wants=network-online.target
+
+[Service]
+User=root
+TimeoutStartSec=0
+ExecStartPre=-/usr/bin/podman stop parental-controls
+ExecStartPre=-/usr/bin/podman rm parental-controls
+ExecStartPre=-/usr/bin/podman pull worldwidewoogie/unifi-parental-controls
+ExecStart=/usr/bin/podman run \
+        --name parental-controls \
+        -p 8080:8080 \
+        -v /etc/unifi-parental-controls/:/node/config/ \
+        -e TZ=America/New_York \
+        worldwidewoogie/unifi-parental-controls
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
