@@ -244,7 +244,7 @@ function recalculateCron() {
                                 let currentMinutes = currentDate.getMinutes()
                                 let currentHour = currentDate.getHours()
                                 let currentDayOfWeek = currentDate.getDay()
-                                let currentCronSchedule = currentMinutes + " " + currentHour + " * * " + daysToCrontab[currentDayOfWeek]
+                                let currentCronSchedule = currentMinutes + " " + currentHour + " * * " + currentDayOfWeek
                                 let lastPiholeSchedule = ''
                                 let lastBlockOrUnblockSchedule = ''
                                 let testSchedule = [...newSchedule]
@@ -252,8 +252,20 @@ function recalculateCron() {
                                 testSchedule.sort((a, b) => {
                                     let [am, ah, ax, ay, aw] = a.split('|')[1].split(' ')
                                     let [bm, bh, bx, by, bw] = b.split('|')[1].split(' ')
-                                    aw = ((6 - currentDayOfWeek) + aw) % 7
-                                    bw = ((6 - currentDayOfWeek) + bw) % 7
+                                    if (aw > currentDayOfWeek
+                                        || (aw == currentDayOfWeek
+                                            && (ah > currentHour
+                                                || (ah == currentHour && am > currentMinutes)))
+                                    ) {
+                                        aw = aw - 7
+                                    } 
+                                    if (bw > currentDayOfWeek
+                                        || (bw == currentDayOfWeek
+                                            && (bh > currentHour
+                                                || (bh == currentHour && bm > currentMinutes)))
+                                    ) {
+                                        bw = bw - 7
+                                    } 
                                     if (aw == bw && ah == bh) {
                                         return (am - bm)
                                     } else if (aw == bw) {
@@ -262,10 +274,11 @@ function recalculateCron() {
                                         return (aw - bw)
                                     }
                                 })
+                                console.dir(testSchedule)
                                 testSchedule.some(s => {
                                     let [m, c, a, p] = s.split('|')
                                     if (a === 'CURRENT') {
-                                        return
+                                        return true
                                     } else if (a === 'pihole') {
                                         lastPiholeSchedule = s
                                     } else {
