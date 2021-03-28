@@ -274,7 +274,6 @@ function recalculateCron() {
                                         return (aw - bw)
                                     }
                                 })
-                                console.dir(testSchedule)
                                 testSchedule.some(s => {
                                     let [m, c, a, p] = s.split('|')
                                     if (a === 'CURRENT') {
