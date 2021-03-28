@@ -425,6 +425,7 @@ function getDeviceGroups() {
                     if (!Object.keys(deviceGroups).includes(device.id)) {
                         newDeviceGroups[device.id] = device.group
                         newDeviceMacAddresses[device.id] = device.mac
+                        groupNameForMac[device.mac] = groupsByID[device.group]
                     }
                 })
                 Object.keys(newDeviceMacAddresses).forEach(id => {
