@@ -4,6 +4,27 @@ const { NodeSSH } = require('node-ssh')
 const unifiAxiosEvents = require('unifi-axios-events')
 const schedule = require('node-schedule')
 const config = require('./config/config.js')
+const state = require('data-store')({ path: './config/state.json' })
+
+// this will not save any changes when set to true
+const debugOnly = config.debugOnly
+
+if (!state.get('managedSite')
+    && !state.get('managedSSIDs')
+    && !state.get('managedGroups')
+    && !state.get('scheduleRecalc')
+    && !state.get('dumpStatus')
+    && !state.get('dumpSchedule')
+    && config.controls
+    && config.log) {
+    console.log('Migrating state from config.js to state.json. You can now remove the log and controls section of config.js.')
+    state.set('managedSite', config.controls.managedSite)
+    state.set('managedSSIDs', config.controls.managedSSIDs)
+    state.set('managedGroups', config.controls.managedGroups)
+    state.set('scheduleRecalc', config.controls.scheduleRecalc)
+    state.set('dumpStatus', config.log.dumpStatus)
+    state.set('dumpSchedule', config.log.dumpSchedule)
+}
 
 const unifi = new unifiAxiosEvents(config.controller)
 const ssh = new NodeSSH()
@@ -66,6 +87,7 @@ const piholeGroupsByName = {}
 const piholeClientIdForMacAddress = {}
 const deviceMacAddresses = {}
 const deviceGroups = {}
+const groupNameForMac = {}
 const ipAddressForMac = {}
 const macAddressForIp = {}
 
@@ -73,13 +95,13 @@ function init() {
     return new Promise((resolve, reject) => {
         unifi.init().then(() => {
             unifi.on('*.connected', data => {
-                if (config.controls.managedSSIDs.includes(data.ssid)) {
+                if (state.get('managedSSIDs').includes(data.ssid)) {
                     console.log(`Recalculating schedule: ${data.msg}`)
                     recalculateCron()
                 }
             })
             unifi.on('*.disconnected', data => {
-                if (config.controls.managedSSIDs.includes(data.ssid)) {
+                if (state.get('managedSSIDs').includes(data.ssid)) {
                     console.log(`Recalculating schedule: ${data.msg}`)
                     recalculateCron()
                 }
@@ -98,23 +120,23 @@ module.exports.init = init
 function startCron() {
     return new Promise((resolve, reject) => {
         recalculateCron().then(() => {
-            console.log(`Scheduling recalculateCron: ${config.controls.scheduleRecalc}`)
-            schedule.scheduleJob('recalculateCron', config.controls.scheduleRecalc, () => {
+            console.log(`Scheduling recalculateCron: ${state.get('scheduleRecalc')}`)
+            schedule.scheduleJob('recalculateCron', state.get('scheduleRecalc'), () => {
                 recalculateCron().catch((error) => {
                     console.error(`Error recalculating cron: ${error}`)
                 })
             })
-            if (config.log.dumpSchedule) {
-                console.log(`Scheduling dumpSchedule: ${config.log.dumpSchedule}`)
-                schedule.scheduleJob('dumpSchedule', config.log.dumpSchedule, () => {
+            if (state.get('dumpSchedule')) {
+                console.log(`Scheduling dumpSchedule: ${state.get('dumpSchedule')}`)
+                schedule.scheduleJob('dumpSchedule', state.get('dumpSchedule'), () => {
                     Object.keys(schedule.scheduledJobs).forEach(jobName => {
                         console.log(jobName)
                     })
                 })
             }
-            if (config.log.dumpStatus) {
-                console.log(`Scheduling dumpStatus: ${config.log.dumpStatus}`)
-                schedule.scheduleJob('dumpStatus', config.log.dumpStatus, () => {
+            if (state.get('dumpStatus')) {
+                console.log(`Scheduling dumpStatus: ${state.get('dumpStatus')}`)
+                schedule.scheduleJob('dumpStatus', state.get('dumpStatus'), () => {
                     dumpStatus()
                 })
             }
@@ -125,19 +147,14 @@ function startCron() {
     })
 }
 
-function recalculateCron(deviceGroup) {
+function recalculateCron() {
     return new Promise((resolve, reject) => {
         console.log('Recalculating cron schedule')
         getGroups().then(() => {
             getDeviceGroups().then(() => {
                 piholeGetClients().then(() => {
                     piholeGetGroups().then(() => {
-                        let d = []
-                        if (deviceGroup) {
-                            d = [deviceGroup]
-                        } else {
-                            d = Object.keys(deviceGroups)
-                        }
+                        let d = Object.keys(deviceGroups)
                         d.forEach(device => {
                             let currentSchedule = []
                             let newSchedule = []
@@ -146,8 +163,8 @@ function recalculateCron(deviceGroup) {
                                     currentSchedule.push(jobName)
                                 }
                             })
-                            if (config.controls.managedGroups[groupsByID[deviceGroups[device]]].enforceSchedule) {
-                                let s = config.controls.managedGroups[groupsByID[deviceGroups[device]]].schedule
+                            if (state.get('managedGroups')[groupsByID[deviceGroups[device]]].enforceSchedule) {
+                                let s = state.get('managedGroups')[groupsByID[deviceGroups[device]]].schedule
                                 Object.keys(s).forEach(day => {
                                     s[day].forEach(entry => {
                                         let action = Object.keys(entry)[0]
@@ -176,6 +193,12 @@ function recalculateCron(deviceGroup) {
                                 console.log(`Scheduling ${jobName}`)
                                 if (action === 'block') {
                                     schedule.scheduleJob(jobName, cronSchedule, () => {
+                                        let overrides = state.get('overrides')
+                                        if (overrides && overrides[groupNameForMac[macAddress]].until === 'nextSchedule') {
+                                            console.log(`Removing override for ${macAddress} due to nextSchedule`)
+                                            delete (overrides[groupNameForMac[macAddress]])
+                                            state.set('overrides', overrides)
+                                        }
                                         console.log(`Blocking ${macAddress} due to schedule`)
                                         block(macAddress).then(message => {
                                             console.log(message)
@@ -185,6 +208,12 @@ function recalculateCron(deviceGroup) {
                                     })
                                 } else if (action === 'unblock') {
                                     schedule.scheduleJob(jobName, cronSchedule, () => {
+                                        let overrides = state.get('overrides')
+                                        if (overrides && overrides[groupNameForMac[macAddress]].until === 'nextSchedule') {
+                                            console.log(`Removing override for ${macAddress} due to nextSchedule`)
+                                            delete (overrides[groupNameForMac[macAddress]])
+                                            state.set('overrides', overrides)
+                                        }
                                         console.log(`Unblocking ${macAddress} due to schedule`)
                                         unblock(macAddress).then(message => {
                                             console.log(message)
@@ -209,7 +238,7 @@ function recalculateCron(deviceGroup) {
                                     })
                                 }
                             })
-                            if (config.controls.managedGroups[groupsByID[deviceGroups[device]]].enforceSchedule
+                            if (state.get('managedGroups')[groupsByID[deviceGroups[device]]].enforceSchedule
                                 && (jobNamesToCancel.length > 0 || jobNamesToSchedule.length > 0)) {
                                 let currentDate = new Date
                                 let currentMinutes = currentDate.getMinutes()
@@ -246,20 +275,20 @@ function recalculateCron(deviceGroup) {
                                 console.log(`Current block schedule : ${lastBlockOrUnblockSchedule}`)
                                 if (lastBlockOrUnblockSchedule === '') {
                                     console.log(`Blocking ${deviceMacAddresses[device]} since it has no current schedule`)
-                                    block(deviceMacAddresses[device])
+                                    block(deviceMacAddresses[device]).then(message => {
+                                        console.log(message)
+                                    }).catch(error => {
+                                        console.error(`Error unblocking ${macAddress}: ${error}`)
+                                    })
                                 } else {
                                     let [macAddress, cronSchedule, action, parameters] = lastBlockOrUnblockSchedule.split('|')
                                     if (action === 'block') {
-                                        if (config.controls.managedGroups[groupsByID[deviceGroups[device]]].harsh) {
-                                            console.log(`Blocking ${macAddress} since current schedule is blocked`)
-                                            block(macAddress).then(message => {
-                                                console.log(message)
-                                            }).catch(error => {
-                                                console.error(`Error blocking ${macAddress}: ${error}`)
-                                            })
-                                        } else {
-                                            console.log(`Not blocking ${macAddress} since enforcement is not harsh`)
-                                        }
+                                        console.log(`Blocking ${macAddress} since current schedule is blocked`)
+                                        block(macAddress).then(message => {
+                                            console.log(message)
+                                        }).catch(error => {
+                                            console.error(`Error blocking ${macAddress}: ${error}`)
+                                        })
                                     } else {
                                         console.log(`Unblocking ${macAddress} since current schedule is unblocked`)
                                         unblock(macAddress).then(message => {
@@ -349,7 +378,7 @@ function getGroups() {
         unifi.get('list/usergroup').then(response => {
             if (response.data) {
                 response.data.forEach(group => {
-                    if (Object.keys(config.controls.managedGroups).includes(group.name)) {
+                    if (Object.keys(state.get('managedGroups')).includes(group.name)) {
                         groupsByID[group._id] = group.name
                         groupsByName[group.name] = group._id
                     } else {
@@ -376,6 +405,7 @@ function getDeviceGroups() {
                 newDeviceMacAddresses[device.id] = device.mac
                 ipAddressForMac[device.mac] = device.ip
                 macAddressForIp[device.ip] = device.mac
+                groupNameForMac[device.mac] = groupsByID[device.group]
             })
             getAllKnownDevicesInGroups().then((devices) => {
                 devices.forEach(device => {
@@ -409,7 +439,7 @@ function getCurrentlyConnectedDevicesForSSIDs() {
         unifi.get('stat/sta').then(response => {
             if (response.data) {
                 response.data.forEach(device => {
-                    if (device.essid && config.controls.managedSSIDs.includes(device.essid)) {
+                    if (device.essid && state.get('managedSSIDs').includes(device.essid)) {
                         let tempDevice = {
                             id: device._id,
                             mac: device.mac,
@@ -460,23 +490,61 @@ function getAllKnownDevicesInGroups() {
 
 function block(mac) {
     return new Promise((resolve, reject) => {
-        unifi.post('cmd/stamgr', { cmd: 'block-sta', mac: mac.toLowerCase() }
-        ).then(() => {
-            resolve(`Blocked ${mac}`)
-        }).catch((error) => {
-            reject(error)
-        })
+        let overrides = state.get('overrides')
+        if (overrides && Object.keys(overrides).includes(groupNameForMac[mac])
+            && ['block', 'unblock'].includes(overrides[groupNameForMac[mac]].action)) {
+            if (!debugOnly) {
+                unifi.post('cmd/stamgr', { cmd: `${overrides[groupNameForMac[mac]].action}-sta`, mac: mac.toLowerCase() }
+                ).then(() => {
+                    resolve(`${mac} ${overrides[groupNameForMac[mac]].action}ed due to schedule override`)
+                }).catch((error) => {
+                    reject(error)
+                })
+            } else {
+                resolve(`DEBUG: ${mac} ${overrides[groupNameForMac[mac]].action}ed due to schedule override`)
+            }
+        } else {
+            if (!debugOnly) {
+                unifi.post('cmd/stamgr', { cmd: 'block-sta', mac: mac.toLowerCase() }
+                ).then(() => {
+                    resolve(`Blocked ${mac}`)
+                }).catch((error) => {
+                    reject(error)
+                })
+            } else {
+                resolve(`DEBUG: Would block ${mac}`)
+            }
+        }
     })
 }
 
 function unblock(mac) {
     return new Promise((resolve, reject) => {
-        unifi.post('cmd/stamgr', { cmd: 'unblock-sta', mac: mac.toLowerCase() }
-        ).then(() => {
-            resolve(`Unblocked ${mac}`)
-        }).catch((error) => {
-            reject(error)
-        })
+        let overrides = state.get('overrides')
+        if (overrides && Object.keys(overrides).includes(groupNameForMac[mac])
+            && ['block', 'unblock'].includes(overrides[groupNameForMac[mac]].action)) {
+            if (!debugOnly) {
+                unifi.post('cmd/stamgr', { cmd: `${overrides[groupNameForMac[mac]].action}-sta`, mac: mac.toLowerCase() }
+                ).then(() => {
+                    resolve(`${mac} ${overrides[groupNameForMac[mac]].action}ed due to schedule override`)
+                }).catch((error) => {
+                    reject(error)
+                })
+            } else {
+                resolve(`DEBUG: ${mac} ${overrides[groupNameForMac[mac]].action}ed due to schedule override`)
+            }
+        } else {
+            if (!debugOnly) {
+                unifi.post('cmd/stamgr', { cmd: 'unblock-sta', mac: mac.toLowerCase() }
+                ).then(() => {
+                    resolve(`Unblocked ${mac}`)
+                }).catch((error) => {
+                    reject(error)
+                })
+            } else {
+                resolve(`DEBUG: Would unblock ${mac}`)
+            }
+        }
     })
 }
 
@@ -509,22 +577,52 @@ function piholeGetClientId(mac) {
 
 function piholeSetGroups(mac, groups) {
     return new Promise((resolve, reject) => {
-        if (piholeClientIdForMacAddress[mac]) {
-            let values = []
-            for (let i = 0; i < groups.length; i++) {
-                if (piholeGroupsByName[groups[i]]) {
-                    values.push(`(${piholeClientIdForMacAddress[mac]}, ${piholeGroupsByName[groups[i]]})`)
+        let overrides = state.get('overrides')
+        if (overrides && Object.keys(overrides).includes(groupNameForMac[mac])
+            && overrides[groupNameForMac[mac]].piholeGroups) {
+            if (!debugOnly) {
+                if (piholeClientIdForMacAddress[mac]) {
+                    let values = []
+                    for (let i = 0; i < overrides[groupNameForMac[mac]].piholeGroups.length; i++) {
+                        if (piholeGroupsByName[overrides[groupNameForMac[mac]].piholeGroups[i]]) {
+                            values.push(`(${piholeClientIdForMacAddress[mac]}, ${piholeGroupsByName[overrides[groupNameForMac[mac]].piholeGroups[i]]})`)
+                        } else {
+                            console.warn(`Not adding ${mac} to pihole override group ${overrides[groupNameForMac[mac]].piholeGroups[i]}: no group id found`)
+                        }
+                    }
+                    piholeExecCommand('setClientGroups', { clientId: piholeClientIdForMacAddress[mac], values: values.join(', ') }).then(() => {
+                        resolve(`Set ${mac} to pihole groups [${groups.join(', ')}] due to override`)
+                    }).catch(error => {
+                        reject(error)
+                    })
                 } else {
-                    console.warn(`Not adding ${mac} to pihole group${groups[i]}: no group id found`)
+                    reject(`No valid pihole client id for ${mac}`)
                 }
+            } else {
+                resolve(`DEBUG: Would set ${mac} to pihole groups [${groups.join(', ')}] due to override`)
             }
-            piholeExecCommand('setClientGroups', { clientId: piholeClientIdForMacAddress[mac], values: values.join(', ') }).then(() => {
-                resolve(`Set ${mac} to pihole groups [${groups.join(', ')}]`)
-            }).catch(error => {
-                reject(error)
-            })
         } else {
-            reject(`No valid pihole client id for ${mac}`)
+            if (!debugOnly) {
+                if (piholeClientIdForMacAddress[mac]) {
+                    let values = []
+                    for (let i = 0; i < groups.length; i++) {
+                        if (piholeGroupsByName[groups[i]]) {
+                            values.push(`(${piholeClientIdForMacAddress[mac]}, ${piholeGroupsByName[groups[i]]})`)
+                        } else {
+                            console.warn(`Not adding ${mac} to pihole group${groups[i]}: no group id found`)
+                        }
+                    }
+                    piholeExecCommand('setClientGroups', { clientId: piholeClientIdForMacAddress[mac], values: values.join(', ') }).then(() => {
+                        resolve(`Set ${mac} to pihole groups [${groups.join(', ')}]`)
+                    }).catch(error => {
+                        reject(error)
+                    })
+                } else {
+                    reject(`No valid pihole client id for ${mac}`)
+                }
+            } else {
+                resolve(`DEBUG: Would set ${mac} to pihole groups [${groups.join(', ')}]`)
+            }
         }
     })
 }
@@ -561,13 +659,35 @@ function piholeExecCommand(command, parameters) {
     })
 }
 
+function getCleanConfig() {
+    return new Promise((resolve, reject) => {
+        let cleanConfig = JSON.parse(JSON.stringify(config));
+        delete cleanConfig.controller.password
+        Object.keys(cleanConfig.ui.users).forEach(u => {
+            cleanConfig.ui.users[u] = '********'
+        })
+        resolve(cleanConfig)
+    })
+}
+
+function httpGetConfig(req, res, next) {
+    getCleanConfig().then((results) => {
+        res.json({ config: results, state: state.get() });
+    }).catch(function (err) {
+        console.dir(err)
+        res.status(500).json({ "error": "Internal Server Error" })
+    })
+}
+
+module.exports.httpGetConfig = httpGetConfig
+
 function getSingleStatus(deviceId) {
     return new Promise((resolve, reject) => {
         unifi.get('stat/user/' + deviceMacAddresses[deviceId].toLowerCase()).then(response => {
             if (response.data && response.data[0]) {
                 let lastschedule = ''
                 let nextschedule = ''
-                if (groupsByID[response.data[0]._id] ? config.controls.managedGroups[groupsByID[response.data[0]._id]].enforceSchedule : config.controls.managedGroups['NOGROUP'].enforceSchedule) {
+                if (groupsByID[response.data[0]._id] ? state.get('managedGroups')[groupsByID[response.data[0]._id]].enforceSchedule : state.get('managedGroups')['NOGROUP'].enforceSchedule) {
                     let date = new Date
                     let minutes = date.getMinutes()
                     let hour = date.getHours()
@@ -603,8 +723,7 @@ function getSingleStatus(deviceId) {
                     name: response.data[0].name ? response.data[0].name : '',
                     blocked: response.data[0].blocked ? response.data[0].blocked : false,
                     group: response.data[0].usergroup_id ? groupsByID[response.data[0].usergroup_id] : 'NOGROUP',
-                    enforceSchedule: groupsByID[response.data[0]._id] ? config.controls.managedGroups[groupsByID[response.data[0]._id]].enforceSchedule : config.controls.managedGroups['NOGROUP'].enforceSchedule,
-                    harsh: groupsByID[response.data[0]._id] ? config.controls.managedGroups[groupsByID[response.data[0]._id]].harsh : false,
+                    enforceSchedule: groupsByID[response.data[0]._id] ? state.get('managedGroups')[groupsByID[response.data[0]._id]].enforceSchedule : state.get('managedGroups')['NOGROUP'].enforceSchedule,
                     lastschedule: lastschedule,
                     nextschedule: nextschedule,
                 }
@@ -661,24 +780,52 @@ function dumpStatus() {
     })
 }
 
-function getCleanConfig() {
-    return new Promise((resolve, reject) => {
-        let cleanConfig = JSON.parse(JSON.stringify(config));
-        delete cleanConfig.controller.password
-        Object.keys(cleanConfig.ui.users).forEach(u => {
-            cleanConfig.ui.users[u] = '********'
-        })
-        resolve(cleanConfig)
-    })
+function httpPostGroup(req, res, next) {
+    if (req.params
+        && req.params.groupName
+        && req.body
+        && req.body.action
+        && ['block', 'unblock', 'useSchedule'].includes(req.body.action)) {
+        if (!req.body.piholeGroups || (Array.isArray(req.body.piholeGroups) && req.body.action === 'unblock')) {
+            if (Object.keys(groupsByName).includes(req.params.groupName)) {
+                let overrides = state.get('overrides')
+                if (!overrides) {
+                    overrides = {}
+                }
+                if (Object.keys(overrides).includes(req.params.groupName)) {
+                    delete (overrides[req.params.groupName])
+                }
+                if (req.body.action !== 'useSchedule') {
+                    let o = { action: req.body.action }
+                    if (req.body.until && ['nextSchedule'].includes(req.body.until)) {
+                        o.until = req.body.until
+                    }
+                    if (req.body.piholeGroups) {
+                        o.piholeGroups = req.body.piholeGroups
+                    }
+                    overrides[req.params.groupName] = o
+                    state.set('overrides', overrides)
+                }
+                Object.keys(schedule.scheduledJobs).forEach(jobName => {
+                    if (groupNameForMac[jobName.split('|')[0]] === req.params.groupName) {
+                        console.log(`Canceling ${jobName} to recalculate for override`)
+                        schedule.cancelJob(jobName)
+                    }
+                })
+                recalculateCron().then(() => {
+                    res.json({ 'status': 'success' })
+                }).catch((error) => {
+                    res.status(500).json({ 'error': `${error}` })
+                })
+            } else {
+                res.status(404).json({ 'error': `No group named ${groupName}` })
+            }
+        } else {
+            res.status(400).json({ 'error': 'piholeGroups can only be set when action is unblock and must be an array' })
+        }
+    } else {
+        res.status(400).json({ 'error': 'groupName and action are required' })
+    }
 }
 
-function httpGetConfig(req, res, next) {
-    getCleanConfig().then((results) => {
-        res.json(results);
-    }).catch(function (err) {
-        console.dir(err)
-        res.status(500).json({ "error": "Internal Server Error" })
-    })
-}
-
-module.exports.httpGetConfig = httpGetConfig
+module.exports.httpPostGroup = httpPostGroup

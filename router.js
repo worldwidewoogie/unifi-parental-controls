@@ -5,8 +5,9 @@ const lib = require('./lib.js')
 
 function getRouter() {
     var router = express.Router()
-    router.route('/status').get(lib.httpGetStatus)
     router.route('/config').get(lib.httpGetConfig)
+    router.route('/status').get(lib.httpGetStatus)
+    router.route('/group/:groupName').post(lib.httpPostGroup)
     return router
 }
 

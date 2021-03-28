@@ -7,31 +7,11 @@ const express = require('express')
 const basicAuth = require('express-basic-auth')
 const config = require('./config/config.js')
 
-const app = express()
-const port = 8080
-const httpServer = http.Server(app)
+const port = config.port ? config.port : 8080
 const router = require('./router.js')
 const openHttpConnections = {}
-
-app.use('/', basicAuth({ users: config.ui.users, challenge: true, realm: 'ParentalControls' }), router.getRouter())
-app.use(express.json())
-
-app.listen(port, () => {
-    console.log(`Listening on http://localhost:${port}`)
-})
-
-lib.init().catch((error) => {
-    console.error(error)
-    shutdown()
-})
-
-httpServer.on('connection', function (conn) {
-    var key = conn.remoteAddress + ':' + (conn.remotePort || '')
-    openHttpConnections[key] = conn
-    conn.on('close', function () {
-        delete openHttpConnections[key]
-    })
-})
+const app = express()
+const httpServer = http.Server(app)
 
 process.on('uncaughtException', function (err) {
     console.error('Uncaught exception ', err)
@@ -48,6 +28,32 @@ process.on('SIGINT', function () {
     shutdown()
 })
 
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
+
+app.use('/', basicAuth({ users: config.ui.users, challenge: true, realm: 'ParentalControls' }), router.getRouter())
+
+app.listen(port, () => {
+    console.log(`Listening on port ${port}`)
+})
+
+lib.init().catch((error) => {
+    console.error(error)
+    shutdown()
+})
+
+app.get('/ping', (req, res) => {
+    res.json({ "status": "success" });
+});
+
+httpServer.on('connection', function (conn) {
+    var key = conn.remoteAddress + ':' + (conn.remotePort || '');
+    openHttpConnections[key] = conn;
+    conn.on('close', function () {
+        delete openHttpConnections[key]
+    })
+})
+
 function shutdown() {
     console.log('Shutting down')
     console.log('Closing web server')
@@ -59,5 +65,3 @@ function shutdown() {
     })
     process.exit(0)
 }
-
-module.exports = app
