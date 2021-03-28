@@ -818,8 +818,8 @@ function httpPostGroup(req, res, next) {
                         o.piholeGroups = req.body.piholeGroups
                     }
                     overrides[req.params.groupName] = o
-                    state.set('overrides', overrides)
                 }
+                state.set('overrides', overrides)
                 Object.keys(schedule.scheduledJobs).forEach(jobName => {
                     if (groupNameForMac[jobName.split('|')[0]] === req.params.groupName) {
                         console.log(`Canceling ${jobName} to recalculate for override`)
